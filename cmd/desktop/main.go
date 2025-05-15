@@ -10,7 +10,11 @@ import (
 )
 
 func main() {
-	storage, err := storage.Open(context.Background(), STORAGE_FILE_PATH)
+	storageFilePath := flag.String("storage", STORAGE_FILE_PATH, "custom storage file path")
+
+	flag.Parse()
+
+	storage, err := storage.Open(context.Background(), *storageFilePath)
 
 	if err != nil {
 		log.Fatal(err)
@@ -23,8 +27,6 @@ func main() {
 	}
 
 	defer appImpl.exit()
-
-	flag.Parse()
 
 	if flag.NArg() == 1 {
 		appImpl.OpenFile(flag.Arg(0))

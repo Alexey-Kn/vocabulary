@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"strings"
 	"time"
 	"vocabulary/internal/app/advanced"
 
@@ -16,8 +17,14 @@ type File struct {
 	db *sql.DB
 }
 
-func Open(ctx context.Context, filePathWithoutExtention string) (*File, error) {
-	db, err := sql.Open("sqlite3", filePathWithoutExtention+".sqlite")
+// Opens or creates an sqlite database by given file path.
+// If filePath argument doesn't include extention, it will be added.
+func Open(ctx context.Context, filePath string) (*File, error) {
+	if !strings.HasSuffix(filePath, FILE_EXTENTION) {
+		filePath += FILE_EXTENTION
+	}
+
+	db, err := sql.Open("sqlite3", filePath)
 
 	if err != nil {
 		return nil, err

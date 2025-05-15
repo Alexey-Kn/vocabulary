@@ -116,6 +116,8 @@ func (ai *loadAllFile) ChooseTopic(s string) {
 }
 
 func (ai *loadAllFile) ProgressRecoveryIsAvailable() bool {
+	ai.saveProgressOfPrevLesson(nil, "", "")
+
 	return ai.storage.SavedProgressAvailable(context.Background(), ai.currentPath, ai.currentSheet)
 }
 

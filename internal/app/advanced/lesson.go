@@ -100,11 +100,13 @@ type Lesson struct {
 	//	* ...
 	//	* first element: original weight
 	lastPhrasesToNotRepeat [4]*phraseWithTasksWeights
+
+	spellingOnly bool
 }
 
 var _ app.Lesson = (*Lesson)(nil)
 
-func New(phrases []app.PhraseWithTranslation) (*Lesson, error) {
+func New(phrases []app.PhraseWithTranslation, spellingOnly bool) (*Lesson, error) {
 	withStatistics := make([]PhraseWithLearningStatistics, len(phrases))
 
 	for i, phrase := range phrases {
@@ -114,10 +116,18 @@ func New(phrases []app.PhraseWithTranslation) (*Lesson, error) {
 		withStatsLine.LearningStatistics = PhraseLearningStatistics{}
 	}
 
-	return NewWithProgress(withStatistics)
+	return newWithProgress(withStatistics, spellingOnly)
 }
 
 func NewWithProgress(phrases []PhraseWithLearningStatistics) (*Lesson, error) {
+	return newWithProgress(phrases, false)
+}
+
+func (l *Lesson) SpellingOnly() bool {
+	return l.spellingOnly
+}
+
+func newWithProgress(phrases []PhraseWithLearningStatistics, spellingOnly bool) (*Lesson, error) {
 	var (
 		phrasesWithStatistics = make([]phraseWithStatisticsAndTasksIndexes, len(phrases))
 		tasksProperties       = make([]taskCreationData, 0, len(phrases)*4)
@@ -144,6 +154,7 @@ func NewWithProgress(phrases []PhraseWithLearningStatistics) (*Lesson, error) {
 				stats,
 				tcd.KnidOfTask,
 				tcd.Inverted,
+				spellingOnly,
 			),
 		)
 
@@ -196,12 +207,21 @@ func NewWithProgress(phrases []PhraseWithLearningStatistics) (*Lesson, error) {
 		randSource:      randSource,
 		tasksProperties: tasksProperties,
 		tasksSelector:   tasksSelector,
+		spellingOnly:    spellingOnly,
 	}, nil
 }
 
 // Contains the logick of prioritizing tasks for their right order in lesson
 // and more productive learning.
-func calculateWeightOfTask(learningStatistics *PhraseLearningStatistics, kindOfTask kindOfTask, taskInverted bool) float64 {
+func calculateWeightOfTask(learningStatistics *PhraseLearningStatistics, kindOfTask kindOfTask, taskInverted bool, spellingOnly bool) float64 {
+	if spellingOnly {
+		if kindOfTask == kindOfTaskTranslateManually && taskInverted {
+			return 1
+		}
+
+		return 0
+	}
+
 	OneOptionChoiceTasksPassed := learningStatistics.CountGuessedOOS +
 		learningStatistics.CountFailedOOS +
 		learningStatistics.CountGuessedOOSInverted +
@@ -287,6 +307,7 @@ func (l *Lesson) setWeightsToTasks(pwsati *phraseWithStatisticsAndTasksIndexes, 
 			&pwsati.LearningStatistics,
 			kindOfTaskChooseOneOption,
 			false,
+			l.spellingOnly,
 		),
 	)
 
@@ -296,6 +317,7 @@ func (l *Lesson) setWeightsToTasks(pwsati *phraseWithStatisticsAndTasksIndexes, 
 			&pwsati.LearningStatistics,
 			kindOfTaskChooseOneOption,
 			true,
+			l.spellingOnly,
 		),
 	)
 
@@ -305,6 +327,7 @@ func (l *Lesson) setWeightsToTasks(pwsati *phraseWithStatisticsAndTasksIndexes, 
 			&pwsati.LearningStatistics,
 			kindOfTaskTranslateManually,
 			false,
+			l.spellingOnly,
 		),
 	)
 
@@ -314,6 +337,7 @@ func (l *Lesson) setWeightsToTasks(pwsati *phraseWithStatisticsAndTasksIndexes, 
 			&pwsati.LearningStatistics,
 			kindOfTaskTranslateManually,
 			true,
+			l.spellingOnly,
 		),
 	)
 }

@@ -54,5 +54,8 @@
     "Recover progress?": "Восстановить прогресс?",
     "Progress recovery": "Восстановка прогресса",
     "Input translation. The notice in the input field is a background suggestion.": "Введите перевод. Надпись в поле ввода - подсказка.",
-    "Input translation": "Ввод перевода"
+    "Input translation": "Ввод перевода",
+    "Mode": "Режим",
+    "Learn": "Зазубривание",
+    "Spelling only": "Только написание"
 }

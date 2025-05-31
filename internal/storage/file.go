@@ -6,6 +6,7 @@ import (
 	"errors"
 	"strings"
 	"time"
+	"vocabulary/internal/app"
 	"vocabulary/internal/app/advanced"
 
 	_ "github.com/mattn/go-sqlite3"
@@ -36,7 +37,8 @@ func Open(ctx context.Context, filePath string) (*File, error) {
 			ID INTEGER PRIMARY KEY AUTOINCREMENT,
 			DATE_UTC TEXT NOT NULL,
 			FILE_PATH TEXT NOT NULL,
-			FILE_SHEET TEXT NOT NULL
+			FILE_SHEET TEXT NOT NULL,
+			MODE INTEGER NOT NULL
 		);
 
 		CREATE TABLE IF NOT EXISTS LESSONS_PROGRESS
@@ -70,14 +72,14 @@ func Open(ctx context.Context, filePath string) (*File, error) {
 	return res, nil
 }
 
-func (s *File) SaveLastOpen(ctx context.Context, excelFilePath, sheet string) error {
+func (s *File) SaveLastOpen(ctx context.Context, excelFilePath, sheet string, mode app.LessonMode) error {
 	tx, err := s.db.Begin()
 
 	if err != nil {
 		return err
 	}
 
-	err = s.updateExcelLessonDateOrAddExcelLesson(ctx, tx, excelFilePath, sheet)
+	err = s.updateExcelLessonDateOrAddExcelLesson(ctx, tx, excelFilePath, sheet, mode)
 
 	if err != nil {
 		return errors.Join(err, tx.Rollback())
@@ -86,17 +88,17 @@ func (s *File) SaveLastOpen(ctx context.Context, excelFilePath, sheet string) er
 	return tx.Commit()
 }
 
-func (s *File) updateExcelLessonDateOrAddExcelLesson(ctx context.Context, tx *sql.Tx, excelFilePath, sheet string) error {
+func (s *File) updateExcelLessonDateOrAddExcelLesson(ctx context.Context, tx *sql.Tx, excelFilePath, sheet string, mode app.LessonMode) error {
 	timeUTC := time.Now().UTC().Format(SQLITE_TIME_FORMAT)
 
 	requestText := `
 		UPDATE EXCEL_LESSONS
-		SET DATE_UTC = ?
+		SET DATE_UTC = ?, MODE = ?
 		WHERE FILE_PATH = ?
 		AND FILE_SHEET = ?
 	`
 
-	requestRes, err := tx.ExecContext(ctx, requestText, timeUTC, excelFilePath, sheet)
+	requestRes, err := tx.ExecContext(ctx, requestText, timeUTC, mode, excelFilePath, sheet)
 
 	if err != nil {
 		return err
@@ -110,11 +112,11 @@ func (s *File) updateExcelLessonDateOrAddExcelLesson(ctx context.Context, tx *sq
 
 	if rowsAffected <= 0 {
 		requestText = `
-			INSERT INTO EXCEL_LESSONS (DATE_UTC, FILE_PATH, FILE_SHEET) VALUES
-			(?, ?, ?)
+			INSERT INTO EXCEL_LESSONS (DATE_UTC, FILE_PATH, FILE_SHEET, MODE) VALUES
+			(?, ?, ?, ?)
 		`
 
-		_, err = tx.ExecContext(ctx, requestText, timeUTC, excelFilePath, sheet)
+		_, err = tx.ExecContext(ctx, requestText, timeUTC, excelFilePath, sheet, mode)
 
 		if err != nil {
 			return err
@@ -124,9 +126,9 @@ func (s *File) updateExcelLessonDateOrAddExcelLesson(ctx context.Context, tx *sq
 	return nil
 }
 
-func (s *File) LoadLastOpen(ctx context.Context) (excelFilePath, sheet string, err error) {
+func (s *File) LoadLastOpen(ctx context.Context) (excelFilePath, sheet string, mode app.LessonMode, err error) {
 	requestText := `
-		SELECT FILE_PATH, FILE_SHEET
+		SELECT FILE_PATH, FILE_SHEET, MODE
 		FROM EXCEL_LESSONS
 		ORDER BY DATE_UTC DESC
 		LIMIT 1
@@ -134,13 +136,13 @@ func (s *File) LoadLastOpen(ctx context.Context) (excelFilePath, sheet string, e
 
 	row := s.db.QueryRowContext(ctx, requestText)
 
-	err = row.Scan(&excelFilePath, &sheet)
+	err = row.Scan(&excelFilePath, &sheet, &mode)
 
 	if errors.Is(err, sql.ErrNoRows) {
-		return "", "", ErrWasNotSaved
+		return "", "", 0, ErrWasNotSaved
 	}
 
-	return excelFilePath, sheet, err
+	return excelFilePath, sheet, mode, err
 }
 
 func (s *File) SavedProgressAvailable(ctx context.Context, excelFilePath, sheet string) bool {
@@ -192,7 +194,7 @@ func (s *File) SaveLessonProgress(
 		return errors.Join(err, tx.Rollback())
 	}
 
-	err = s.updateExcelLessonDateOrAddExcelLesson(ctx, tx, excelFilePath, sheet)
+	err = s.updateExcelLessonDateOrAddExcelLesson(ctx, tx, excelFilePath, sheet, app.LessonModeLern)
 
 	if err != nil {
 		return errors.Join(err, tx.Rollback())

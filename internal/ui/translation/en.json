@@ -54,5 +54,8 @@
     "Recover progress?": "Recover progress?",
     "Progress recovery": "Progress recovery",
     "Input translation. The notice in the input field is a background suggestion.": "Input translation. The notice in the input field is a background suggestion.",
-    "Input translation": "Input translation"
+    "Input translation": "Input translation",
+    "Mode": "Mode",
+    "Learn": "Learn",
+    "Spelling only": "Spelling only"
 }

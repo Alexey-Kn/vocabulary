@@ -2,6 +2,13 @@ package app
 
 import "context"
 
+type LessonMode byte
+
+const (
+	LessonModeLern LessonMode = iota
+	LessonModeLeanSpellingOnly
+)
+
 type Lesson interface {
 	Next(ctx context.Context) (PhraseLearningTask, error)
 }

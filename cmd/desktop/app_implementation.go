@@ -17,6 +17,7 @@ type loadAllFile struct {
 	currentPath  string
 	sheets       []string
 	currentSheet string
+	mode         app.LessonMode
 
 	prevLesson         *advanced.Lesson
 	prevLessonFilePath string
@@ -25,6 +26,14 @@ type loadAllFile struct {
 }
 
 var _ ui.Application = (*loadAllFile)(nil)
+
+func (ai *loadAllFile) SetLessonMode(mode app.LessonMode) {
+	ai.mode = mode
+}
+
+func (ai *loadAllFile) GetLessonMode() app.LessonMode {
+	return ai.mode
+}
 
 func (ai *loadAllFile) close() {
 	if ai.excelFile != nil {
@@ -44,7 +53,7 @@ func (ai *loadAllFile) exit() {
 }
 
 func (ai *loadAllFile) saveProgressOfPrevLesson(currentLesson *advanced.Lesson, cueerntLessonFilePath, currentLessonSheet string) {
-	if ai.prevLesson != nil {
+	if ai.prevLesson != nil && !ai.prevLesson.SpellingOnly() {
 		phrasesLearningStatistics := ai.prevLesson.GetProgress()
 
 		toStore := make(map[string]advanced.PhraseLearningStatistics, len(phrasesLearningStatistics))
@@ -64,7 +73,7 @@ func (ai *loadAllFile) saveProgressOfPrevLesson(currentLesson *advanced.Lesson, 
 }
 
 func (ai *loadAllFile) OpenLast() error {
-	path, sheet, err := ai.storage.LoadLastOpen(context.Background())
+	path, sheet, mode, err := ai.storage.LoadLastOpen(context.Background())
 
 	if err != nil {
 		return err
@@ -73,6 +82,8 @@ func (ai *loadAllFile) OpenLast() error {
 	ai.OpenFile(path)
 
 	ai.ChooseTopic(sheet)
+
+	ai.SetLessonMode(mode)
 
 	return nil
 }
@@ -118,7 +129,7 @@ func (ai *loadAllFile) ChooseTopic(s string) {
 func (ai *loadAllFile) ProgressRecoveryIsAvailable() bool {
 	ai.saveProgressOfPrevLesson(nil, "", "")
 
-	return ai.storage.SavedProgressAvailable(context.Background(), ai.currentPath, ai.currentSheet)
+	return ai.mode == app.LessonModeLern && ai.storage.SavedProgressAvailable(context.Background(), ai.currentPath, ai.currentSheet)
 }
 
 func (ai *loadAllFile) BeginLesson(recoverProgress bool) (app.Lesson, error) {
@@ -133,20 +144,26 @@ func (ai *loadAllFile) BeginLesson(recoverProgress bool) (app.Lesson, error) {
 	ai.saveProgressOfPrevLesson(nil, "", "")
 
 	var (
+		phrasesWithoutProgress   []app.PhraseWithTranslation
 		phrases                  []advanced.PhraseWithLearningStatistics
 		storedStatisticsByPhrase map[string]advanced.PhraseLearningStatistics
 	)
 
-	if recoverProgress {
-		storedStatisticsByPhrase, err = ai.storage.LoadLessonProgress(context.Background(), ai.currentPath, ai.currentSheet)
+	switch ai.mode {
+	case app.LessonModeLern:
+		if recoverProgress {
+			storedStatisticsByPhrase, err = ai.storage.LoadLessonProgress(context.Background(), ai.currentPath, ai.currentSheet)
 
-		if err != nil {
-			return nil, err
+			if err != nil {
+				return nil, err
+			}
+
+			phrases = make([]advanced.PhraseWithLearningStatistics, 0, len(storedStatisticsByPhrase))
+		} else {
+			phrases = []advanced.PhraseWithLearningStatistics{}
 		}
-
-		phrases = make([]advanced.PhraseWithLearningStatistics, 0, len(storedStatisticsByPhrase))
-	} else {
-		phrases = []advanced.PhraseWithLearningStatistics{}
+	case app.LessonModeLeanSpellingOnly:
+		phrasesWithoutProgress = []app.PhraseWithTranslation{}
 	}
 
 	for rows.Next() {
@@ -163,32 +180,51 @@ func (ai *loadAllFile) BeginLesson(recoverProgress bool) (app.Lesson, error) {
 		phrase := cols[0]
 		translation := cols[1]
 
-		learningStatistics := advanced.PhraseLearningStatistics{}
+		switch ai.mode {
+		case app.LessonModeLern:
+			learningStatistics := advanced.PhraseLearningStatistics{}
 
-		if recoverProgress {
-			storedStatisticsForThisPhrase, found := storedStatisticsByPhrase[phrase]
+			if recoverProgress {
+				storedStatisticsForThisPhrase, found := storedStatisticsByPhrase[phrase]
 
-			if found {
-				learningStatistics = storedStatisticsForThisPhrase
+				if found {
+					learningStatistics = storedStatisticsForThisPhrase
+				}
 			}
-		}
 
-		phrases = append(
-			phrases,
-			advanced.PhraseWithLearningStatistics{
-				Phrase: app.PhraseWithTranslation{
+			phrases = append(
+				phrases,
+				advanced.PhraseWithLearningStatistics{
+					Phrase: app.PhraseWithTranslation{
+						Phrase:      phrase,
+						Translation: translation,
+					},
+					LearningStatistics: learningStatistics,
+				},
+			)
+		case app.LessonModeLeanSpellingOnly:
+			phrasesWithoutProgress = append(
+				phrasesWithoutProgress,
+				app.PhraseWithTranslation{
 					Phrase:      phrase,
 					Translation: translation,
 				},
-				LearningStatistics: learningStatistics,
-			},
-		)
+			)
+		}
+
 	}
 
-	res, err := advanced.NewWithProgress(phrases)
+	var res *advanced.Lesson
+
+	switch ai.mode {
+	case app.LessonModeLern:
+		res, err = advanced.NewWithProgress(phrases)
+	case app.LessonModeLeanSpellingOnly:
+		res, err = advanced.New(phrasesWithoutProgress, true)
+	}
 
 	if err == nil {
-		ai.storage.SaveLastOpen(context.Background(), ai.currentPath, ai.currentSheet)
+		ai.storage.SaveLastOpen(context.Background(), ai.currentPath, ai.currentSheet, ai.mode)
 
 		ai.saveProgressOfPrevLesson(res, ai.currentPath, ai.currentSheet)
 	}

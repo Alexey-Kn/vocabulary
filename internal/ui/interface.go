@@ -8,6 +8,9 @@ type Application interface {
 	OpenFile(path string) bool
 	FilePath() string
 
+	SetLessonMode(app.LessonMode)
+	GetLessonMode() app.LessonMode
+
 	AvailableTopics() []string
 	ChooseTopic(string)
 	Topic() string

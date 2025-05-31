@@ -3,6 +3,7 @@ package ui
 import (
 	"context"
 	"sync"
+	"vocabulary/internal/app"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
@@ -19,6 +20,7 @@ type mainMenu struct {
 	filePathEntry  *widget.Entry
 	learnButton    *widget.Button
 	topicSelection *widget.Select
+	modeSelection  *widget.Select
 }
 
 func (m *mainMenu) topicChanged(topic string) {
@@ -108,10 +110,22 @@ func (m *mainMenu) beginLesson(recoverProgress bool) {
 	openLesson(m.ctx, m.wg, m.mainWindow, lesson, m.app)
 }
 
+func (m *mainMenu) modeSelected(string) {
+	switch m.modeSelection.SelectedIndex() {
+	case 0:
+		m.app.SetLessonMode(app.LessonModeLern)
+	case 1:
+		m.app.SetLessonMode(app.LessonModeLeanSpellingOnly)
+	}
+
+	m.update()
+}
+
 func (m *mainMenu) update() {
 	m.learnButton.OnTapped = nil
 	m.topicSelection.OnChanged = nil
 	m.filePathEntry.OnChanged = nil
+	m.modeSelection.OnChanged = nil
 
 	path := m.app.FilePath()
 
@@ -137,9 +151,17 @@ func (m *mainMenu) update() {
 		m.learnButton.Disable()
 	}
 
+	switch m.app.GetLessonMode() {
+	case app.LessonModeLern:
+		m.modeSelection.SetSelectedIndex(0)
+	case app.LessonModeLeanSpellingOnly:
+		m.modeSelection.SetSelectedIndex(1)
+	}
+
 	m.learnButton.OnTapped = m.learnButtonPressed
 	m.topicSelection.OnChanged = m.topicChanged
 	m.filePathEntry.OnChanged = m.filePathChanged
+	m.modeSelection.OnChanged = m.modeSelected
 }
 
 // Opens a menu for choice an excel file and its' sheet.
@@ -154,6 +176,7 @@ func openMainMenu(ctx context.Context, wg *sync.WaitGroup, mainWindow fyne.Windo
 		filePathEntry:  widget.NewEntry(),
 		learnButton:    widget.NewButton(lang.L("Begin lesson"), nil),
 		topicSelection: widget.NewSelect([]string{}, nil),
+		modeSelection:  widget.NewSelect([]string{lang.L("Learn"), lang.L("Spelling only")}, nil),
 	}
 
 	menu.learnButton.Importance = widget.HighImportance
@@ -199,6 +222,10 @@ func openMainMenu(ctx context.Context, wg *sync.WaitGroup, mainWindow fyne.Windo
 						lang.L("Topic")+":",
 					),
 					menu.topicSelection,
+					widget.NewLabel(
+						lang.L("Mode")+":",
+					),
+					menu.modeSelection,
 				),
 				layout.NewSpacer(),
 			),
